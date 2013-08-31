@@ -1,0 +1,136 @@
+=== Efficiently Manipulating Immutable Data Structures
+
+// By John Touron (jwtouron)
+
+===== Problem
+
+You want to efficiently manipulate a possibly big or deeply nested immutable data structure.
+
+===== Solution
+
+Use +clojure.zip+.
+
+[source,clojure]
+----
+(require '[clojure.zip :as z])
+
+(defn print-grid [grid]
+  (doseq [row grid]
+    (let [[x y z] row]
+      (println x y z))))
+
+(def grid [[0 0 0]
+           [0 0 0]
+           [0 0 0]])
+
+(print-grid grid)
+;; -> nil
+;; *out*
+;; 0 0 0
+;; 0 0 0
+;; 0 0 0
+
+(-> grid
+    z/vector-zip
+    z/down
+    z/right
+    z/down
+    z/right
+    (z/edit inc)
+    z/root
+    print-grid)
+;; -> nil
+;; *out*
+;; 0 0 0
+;; 0 1 0
+;; 0 0 0
+----
+
+===== Discussion
+
+Impure languages manipulate data by modifying a location in memory (e.g., by traversing a list and modifying nodes or directly accessing array indices). In pure languages such as Clojure, data isn't modified -- new data is created from existing data.
+
+When a value in a data structure is to be changed, the new value is combined with the context of the old value, returning the old data structure slightly changed.
+
+[source,clojure]
+----
+;; Change 5 to :a
+(let [nums (range 10)]
+  (concat (take 5 nums) [:a] (drop 6 nums)))
+;; -> (0 1 2 3 4 :a 6 7 8 9)
+----
+
+Doing this repeatedly, especially on big data structures, can be costly. Furthermore, code becomes less and less clear as the manipulation becomes more complicated. Pure languages provide zippers for efficient, clear manipulation.
+
+[source,clojure]
+----
+;; Change 5 to :a
+(require '[clojure.zip :as z])
+(let [nums (range 10)
+      zpr (z/seq-zip nums)]
+  (-> zpr z/down z/right z/right z/right z/right z/right (z/replace :a) z/root))
+;; -> (0 1 2 3 4 :a 6 7 8 9)
+----
+
+Zippers represent a location in a data structure. They store the context of that location. List zippers, for example, store the list ahead of the location, as well as the elements already traversed. Tree zippers store the current tree, the siblings to the left, the siblings to the right, and the parent nodes. You are able to move to a certain location by describing a path to it from your current location.
+
++clojure.zip+ also allows you to define your own custom zippers, using +clojure.zip/zipper+.
+[source,clojure]
+----
+;; Calculating all possible permutations of a coin flipped 3 times
+
+(require '[clojure.zip :as z])
+
+(defn make-coin-zipper
+  "Creates a zipper to help describe coin flips.
+  Each node will be a map consisting of:
+    :result   => :heads or :tails
+    :children => The child nodes of this coin toss"
+  ([]
+     (make-coin-zipper nil))
+  ([tree]
+     (z/zipper (constantly true) :children #(assoc %1 :children %2) tree)))
+
+(defn make-permutations
+  "Creates a tree describing coin flip permutations, n levels deep"
+  [n]
+  (loop [zpr (make-coin-zipper)]
+    (if (z/end? zpr) <1>
+      (z/root zpr)
+      (let [zpr (if (= n (count (z/path zpr))) <2>
+                  zpr
+                  (-> zpr
+                      (z/append-child {:result :heads})
+                      (z/append-child {:result :tails})))]
+        (recur (z/next zpr)))))) <3>
+
+(defn print-permutations
+  "Prints all permutations of coin tosses described in a tree."
+  [tree]
+  (loop [zpr (make-coin-zipper tree)] <4>
+    (when-not (z/end? zpr)
+      (when (empty? (z/children zpr)) <5>
+        (let [current-result (:result (z/node zpr))
+              parent-results (map :result (rest (z/path zpr)))]
+          (println (cons current-result parent-results))))
+      (recur (z/next zpr)))))
+
+(print-permutations (make-permutations 3))
+;; -> nil
+;; *out*
+;; (:heads :heads :heads)
+;; (:tails :heads :heads)
+;; (:heads :heads :tails)
+;; (:tails :heads :tails)
+;; (:heads :tails :heads)
+;; (:tails :tails :heads)
+;; (:heads :tails :tails)
+;; (:tails :tails :tails)
+----
+* <1> +clojure.zip/end?+ returns true when the zipper can't be traversed any further.
+* <2> If the number of nodes above the current one is less than the desired depth,
+  append 2 children -- one with :heads, one with :tails
+* <3> +clojure.zip/next+ traverses a zipper in a depth-first pre-order manner.
+* <4> Again iterating through the tree in a depth-first pre-order manner.
+* <5> If the current node has no children, print the node's result and results
+  of its parents
