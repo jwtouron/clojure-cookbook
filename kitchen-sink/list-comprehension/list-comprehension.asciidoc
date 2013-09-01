@@ -1,0 +1,139 @@
+=== List Comprehension
+
+// By John Touron (jwtouron)
+
+===== Problem
+
+You want to generate a sequence from one or more collections, possibly filtering the input collections.
+
+===== Solution
+
+Use +for+.
+
+[source,clojure]
+----
+(for [x (range)
+      :while (< x 10)
+      :when (zero? (mod x 5))
+      :let [y (/ x 5)]
+      c [\a \b]]
+  [y c])
+;; -> ([0 \a] [0 \b] [1 \a] [1 \b])
+----
+
+===== Discussion
+
+Clojure's +for+ is a powerful tool for generating lazy sequences comprised of the cartesian product of all input collections. You can create bindings with +:let+. +:when+ and +:while+ provide filtering on input collection(s). Placing constraints just after the variables they depend on can speed up execution time.
+
+Here is an example demonstrating +for+'s power:
+
+*The Zebra Puzzle* footnote:[http://en.wikipedia.org/wiki/Zebra_Puzzle]
+
+Given the following clues, determine who drinks the water and who owns the zebra.
+
+. There are five houses.
+. The Englishman lives in the red house.
+. The Spaniard owns the dog.
+. Coffee is drunk in the green house.
+. The Ukrainian drinks tea.
+. The green house is immediately to the right of the ivory house.
+. The Old Gold smoker owns snails.
+. Kools are smoked in the yellow house.
+. Milk is drunk in the middle house.
+. The Norwegian lives in the first house.
+. The man who smokes Chesterfields lives in the house next to the man with the fox.
+. Kools are smoked in the house next to the house where the horse is kept.
+. The Lucky Strike smoker drinks orange juice.
+. The Japanese smokes Parliaments.
+. The Norwegian lives next to the blue house.
+
+[source,clojure]
+----
+(require '[clojure.math.combinatorics :refer [permutations]])
+
+(defn solve-zebra-puzzle []
+  (let [houses [1 2 3 4 5]              ; There are five houses.
+        perms permutations]
+    (for [;; House colors
+          [yellow blue red ivory green] (perms houses)
+          ;; The green house is immediately to the right of the ivory house.
+          :when (= green (inc ivory))
+
+          ;; Nationalities
+          [norwegian ukrainian englishman spaniard japanese] (perms houses)
+          ;; The Englishman lives in the red house.
+          :when (= englishman red)
+          ;; The Norwegian lives in the first house.
+          :when (= norwegian 1)
+          ;; The Norwegian lives next to the blue house.
+          :when (or (= norwegian (inc blue)) (= norwegian (dec blue)))
+
+          ;; Drinks
+          [water tea milk orange-juice coffee] (perms houses)
+          ;; Coffee is drunk in the green house.
+          :when (= coffee green)
+          ;; The Ukrainian drinks tea.
+          :when (= ukrainian tea)
+          ;; Milk is drunk in the middle house.
+          :when (= milk 3)
+
+          ;; Smokes
+          [kools chesterfield old-gold lucky-strike parliament] (perms houses)
+          ;; Kools are smoked in the yellow house.
+          :when (= kools yellow)
+          ;; The Lucky Strike smoker drinks orange juice.
+          :when (= lucky-strike orange-juice)
+          ;; The Japanese smokes Parliaments.
+          :when (= japanese parliament)
+
+          ;; Pets
+          [fox horse snails dog zebra] (perms houses)
+          ;; The Spaniard owns the dog.
+          :when (= spaniard dog)
+          ;; The Old Gold smoker owns snails.
+          :when (= old-gold snails)
+          ;; The man who smokes Chesterfields lives in the house next to the man
+          ;; with the fox.
+          :when (or (= chesterfield (inc fox)) (= chesterfield (dec fox)))
+          ;; Kools are smoked in the house next to the house where the horse is
+          ;; kept.
+          :when (or (= kools (inc horse)) (= kools (dec horse)))]
+
+      {:yellow yellow :blue blue :red red :ivory ivory :green green
+       :norwegian norwegian :ukrainian ukrainian :englishman englishman
+       :spaniard spaniard :japanese japanese :water water :tea tea :milk milk
+       :orange-juice orange-juice :coffee coffee :kools kools
+       :chesterfield chesterfield :old-gold old-gold :lucky-strike lucky-strike
+       :parliament parliament :fox fox :horse horse :snails snails :dog dog
+       :zebra zebra})))
+
+(doseq [[attribute house] (->> (solve-zebra-puzzle) first (sort-by second))]
+  (println house attribute))
+;; -> nil
+;; *out*
+;; 1 :water
+;; 1 :norwegian
+;; 1 :kools
+;; 1 :yellow
+;; 1 :fox
+;; 2 :horse
+;; 2 :tea
+;; 2 :blue
+;; 2 :ukrainian
+;; 2 :chesterfield
+;; 3 :old-gold
+;; 3 :red
+;; 3 :snails
+;; 3 :englishman
+;; 3 :milk
+;; 4 :spaniard
+;; 4 :ivory
+;; 4 :lucky-strike
+;; 4 :dog
+;; 4 :orange-juice
+;; 5 :japanese
+;; 5 :green
+;; 5 :zebra
+;; 5 :coffee
+;; 5 :parliament
+----
